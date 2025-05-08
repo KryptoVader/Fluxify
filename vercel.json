@@ -1,19 +1,12 @@
 {
-    "builds": [
-      {
-        "src": "app/api/convert/Dockerfile",
-        "use": "@vercel/docker"
-      },
-      {
-        "src": "app/api/convert/route.ts",
-        "use": "@vercel/node"
+    "version": 2,
+    "installCommand": "apt-get update && apt-get install -y python3-pip python3-venv default-jre-headless libreoffice poppler-utils",
+    "functions": {
+      "app/api/convert/route.ts": {
+        "runtime": "@vercel/node@2.0.0",
+        "memory": 1024,
+        "maxDuration": 10
       }
-    ],
-    "routes": [
-      {
-        "src": "/api/convert/(.*)",
-        "dest": "/app/api/convert/route.ts"
-      }
-    ]
+    }
   }
   
