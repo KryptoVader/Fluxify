@@ -1,0 +1,8 @@
+{
+    "functions": {
+      "app/api/**/*.{js,ts}": {
+        "runtime": "dockerfile"
+      }
+    }
+}
+  
