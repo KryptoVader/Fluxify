@@ -1,8 +1,19 @@
 {
-    "functions": {
-      "app/api/**/*.{js,ts}": {
-        "runtime": "dockerfile"
+    "builds": [
+      {
+        "src": "app/api/convert/Dockerfile",
+        "use": "@vercel/docker"
+      },
+      {
+        "src": "app/api/convert/route.ts",
+        "use": "@vercel/node"
       }
-    }
-}
+    ],
+    "routes": [
+      {
+        "src": "/api/convert/(.*)",
+        "dest": "/app/api/convert/route.ts"
+      }
+    ]
+  }
   

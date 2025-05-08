@@ -1,8 +1,6 @@
 // app/api/convert/route.ts
 
-// 1️⃣ Force Next.js to treat this as a purely dynamic API route
 export const dynamic = 'force-dynamic';
-// 2️⃣ Run in the Node.js runtime so request.formData() and fs work
 export const runtime = 'nodejs';
 
 import { NextResponse } from 'next/server';
@@ -17,15 +15,14 @@ export async function POST(request: Request) {
   if (!(maybeFile instanceof File)) {
     return NextResponse.json({ error: 'No file provided' }, { status: 400 });
   }
+
+  // 1️⃣ Extract parameters
   const file = maybeFile as File;
   const outputFormat = String(formData.get('outputFormat'));
-  if (!outputFormat) {
-    return NextResponse.json({ error: 'Missing outputFormat' }, { status: 400 });
-  }
   const highQuality = formData.get('highQuality') === 'true';
   const forceTranscode = formData.get('forceTranscode') === 'true';
 
-  // Write upload to /tmp
+  // 2️⃣ Write the upload into /tmp (or public/tmp)
   const inputExt = file.name.split('.').pop()!.toLowerCase();
   const buffer = Buffer.from(await file.arrayBuffer());
   const tmpDir = path.join(process.cwd(), 'public', 'tmp');
@@ -34,28 +31,42 @@ export async function POST(request: Request) {
   const inputPath = path.join(tmpDir, `${ts}-in.${inputExt}`);
   await fs.writeFile(inputPath, buffer);
 
-  // Prepare CLI args
+  // 3️⃣ Determine which Python wrapper to call
+  //    (Assumes you’ve placed these under app/lib/converters/)
+  let scriptName: string;
+  switch (outputFormat) {
+    case 'docx':
+      scriptName = 'pdf2docx_wrapper.py';
+      break;
+    case 'csv':
+      scriptName = 'table_convert_wrapper.py';
+      break;
+    default:
+      return NextResponse.json({ error: 'Unsupported outputFormat' }, { status: 400 });
+  }
+  const scriptPath = path.join(process.cwd(), 'app', 'lib', 'converters', scriptName);
+
+  // 4️⃣ Build the CLI args for Python
+  //    We’ll pass inputPath, outputPath, and flags
   const outputName = `${ts}-out.${outputFormat}`;
   const outputPath = path.join(tmpDir, outputName);
-  const cliArgs = [
-    inputPath,
-    outputFormat,
-    ...(highQuality ? ['--highQuality'] : []),
-    ...(forceTranscode ? ['--forceTranscode'] : [])
-  ];
+  const args = [scriptPath, inputPath, outputPath];
+  if (highQuality) args.push('--highQuality');
+  if (forceTranscode) args.push('--forceTranscode');
 
-  // Spawn your CLI (which runs PluginManager under the hood)
+  // 5️⃣ Invoke Python inside your .venv
+  //    Make sure your vercel-build created .venv in project root
+  const pythonBin = path.join(process.cwd(), '.venv', 'bin', 'python3');
   await new Promise<void>((resolve, reject) => {
-    const proc = spawn(
-      'node',
-      ['--enable-source-maps', 'cli.js', ...cliArgs],
-      { cwd: process.cwd(), stdio: 'inherit' }
-    );
+    const proc = spawn(pythonBin, args, {
+      cwd: process.cwd(),
+      stdio: 'inherit'
+    });
     proc.on('exit', code => code === 0 ? resolve() : reject(new Error(`exit ${code}`)));
     proc.on('error', reject);
   });
 
-  // Read back and stream
+  // 6️⃣ Read the output file and stream it back
   const resultBuffer = await fs.readFile(outputPath);
   return new NextResponse(resultBuffer, {
     status: 200,

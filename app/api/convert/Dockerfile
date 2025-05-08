@@ -28,12 +28,12 @@ ENV PATH="/opt/venv/bin:${PATH}"
 
 # 5. Copy only the Python wrappers and JS plugins
 RUN mkdir -p /app/lib/converters/plugins
-COPY lib/converters/plugins/*.py /app/lib/converters/plugins/
-COPY lib/converters/plugins/*.js /app/lib/converters/plugins/
+COPY ../../../lib/converters/plugins/*.py /app/lib/converters/plugins/
+COPY ../../../lib/converters/plugins/*.js /app/lib/converters/plugins/
 
 # 6. Copy PluginManager.js to converters folder
 RUN mkdir -p /app/lib/converters
-COPY lib/converters/PluginManager.js /app/lib/converters/
+COPY ../../../lib/converters/PluginManager.js /app/lib/converters/
 
 # 7. Install Node.js dependencies
 WORKDIR /app

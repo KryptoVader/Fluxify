@@ -1,0 +1,8 @@
+pdf2docx
+pandas
+tabula-py
+xmltodict
+pyxlsb
+openpyxl
+xlrd
+python-docx
