@@ -13,7 +13,7 @@ RUN apt-get update && \
 
 # 3. (Optional) Install any Python-based converters you need
 #    Copy your Python wrapper(s) into the image, then pip-install their deps
-COPY api/converters/plugins/pdf2docx_wrapper.py /app/api/converters/plugins/
+COPY lib/converters/plugins/pdf2docx_wrapper.py lib/converters/plugins/table_convert_wrapper.py lib/converters/plugins/
 RUN pip3 install pdf2docx
 
 # 4. Set working directory & install Node.js dependencies
