@@ -56,11 +56,7 @@ export function FileDropzone({
   });
 
   // Remove event handlers that conflict with Framer Motion's onDrag
-  const {
-    onDrag, onDragStart, onDragEnd, onDragOver, onDragEnter, onDragLeave, onDrop: onDropEvt,
-    ...rootProps
-  } = getRootProps();
-
+  const rootProps = getRootProps();
   return (
     <div className={className}>
       <div

@@ -34,11 +34,11 @@ const TypeWriterAnimation = () => {
   
   // Define the phrases to cycle through
   const phrases = [
-    "File conversion reimagined",
-    "Document transformation simplified",
-    "Format conversion perfected",
-    "File conversion redefined",
-    "Media conversion streamlined"
+    "File Conversion Reimagined",
+    "Document Transformation Simplified",
+    "Format Conversion Perfected",
+    "File Conversion Redefined",
+    "Media Conversion Streamlined"
   ];
   
   useEffect(() => {

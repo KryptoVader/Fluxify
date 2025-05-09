@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,8 @@ import {
   CircleHelp,
   FileType,
   Settings2,
+  AlertCircle,
+  Upload,
 } from "lucide-react";
 import { DownloadCard } from "./DownloadCard";
 import {
@@ -36,6 +38,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 // Simplified formats map
 type FormatsMap = Record<string, string[]>;
@@ -56,6 +59,7 @@ export default function ConversionForm() {
   const [highQuality, setHighQuality] = useState(false);
   const [resultUrl, setResultUrl] = useState<string | null>(null);
   const [convertedFileName, setConvertedFileName] = useState<string>("");
+  const [error, setError] = useState<string | null>(null);
 
   // Determine if current file uses FFmpeg plugin
   const isFfmpegFile = file
@@ -64,41 +68,74 @@ export default function ConversionForm() {
 
   // Load supported formats on mount
   useEffect(() => {
-    fetch("/api/supported-formats")
-      .then(res => res.json())
-      .then((data: FormatsMap) => {
+    const loadFormats = async () => {
+      try {
+        const res = await fetch("/api/supported-formats");
+        if (!res.ok) {
+          throw new Error(`Failed to load formats (${res.status})`);
+        }
+        const data: FormatsMap = await res.json();
         setFormatsMap(data);
-        const first = Object.keys(data)[0] || "";
-        setInputFormat(first);
-        setOutputFormat(data[first]?.[0] || "");
+        
+        // Only set default formats if there's data
+        if (Object.keys(data).length > 0) {
+          const first = Object.keys(data)[0] || "";
+          setInputFormat(first);
+          setOutputFormat(data[first]?.[0] || "");
+        }
+        
         setTimeout(() => setIsInitializing(false), 300);
-      })
-      .catch(() => {
+      } catch (err) {
+        console.error("Error loading formats:", err);
         setIsInitializing(false);
-        toast.error("Failed to load formats.");
-      });
+        toast.error("Failed to load supported formats. Please refresh the page.");
+      }
+    };
+    
+    loadFormats();
   }, []);
 
   const handleFileAccepted = (f: File) => {
+    console.log("File accepted:", f.name); // Debug log
     setFile(f);
     setHighQuality(false); // reset HQ when new file loaded
+    setError(null); // Clear any previous errors
+    
     const ext = f.name.split('.').pop()?.toLowerCase() || '';
     toast.success(`Uploaded ${f.name}`, {
       description: `${(f.size / 1024 / 1024).toFixed(2)} MB`,
       action: { label: 'Remove', onClick: () => setFile(null) }
     });
+    
+    // Only set formats if this extension is recognized
     if (formatsMap[ext]) {
       setInputFormat(ext);
       setOutputFormat(formatsMap[ext][0]);
+    } else {
+      // Handle unrecognized file format
+      toast.error("Unsupported file format", {
+        description: `The format ${ext.toUpperCase()} is not supported for conversion.`
+      });
+      setError(`File format .${ext} is not supported. Please try a different file.`);
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!file || !outputFormat) {
-      toast.error("Please upload a file and select an output format.");
+    setError(null); // Clear any previous errors
+    
+    if (!file) {
+      setError("Please upload a file first.");
+      toast.error("Please upload a file first.");
       return;
     }
+    
+    if (!outputFormat) {
+      setError("Please select an output format.");
+      toast.error("Please select an output format.");
+      return;
+    }
+    
     setIsLoading(true);
     try {
       const formData = new FormData();
@@ -111,15 +148,33 @@ export default function ConversionForm() {
       }
 
       const response = await fetch('/api/convert', { method: 'POST', body: formData });
+      
+      if (!response.ok) {
+        // Handle different types of HTTP errors
+        if (response.status === 500) {
+          throw new Error("Server error occurred. Please try again later.");
+        } else if (response.status === 413) {
+          throw new Error("File too large for conversion.");
+        } else if (response.status === 415) {
+          throw new Error("Unsupported file format.");
+        } else {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.message || `Error (${response.status}): File conversion failed.`);
+        }
+      }
+      
       const data = await response.json();
       const url = data.converted?.[0]?.url;
-      if (!url) throw new Error('Conversion failed');
+      if (!url) throw new Error('Conversion failed. No output file was created.');
       setResultUrl(url);
       const base = file.name.replace(/\.[^.]+$/, '');
       setConvertedFileName(`${base}.${outputFormat}`);
       toast.success('Conversion successful!');
     } catch (err: any) {
-      toast.error(err.message || 'Server error during conversion.');
+      const errorMessage = err.message || 'File conversion failed. Please try again.';
+      setError(errorMessage);
+      toast.error(errorMessage);
+    } finally {
       setIsLoading(false);
     }
   };
@@ -169,8 +224,29 @@ export default function ConversionForm() {
           </div>
         </CardHeader>
         <CardContent>
+          {error && (
+            <Alert variant="destructive" className="mb-6">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Error</AlertTitle>
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+          
           <form onSubmit={handleSubmit} className="space-y-6">
-            <FileDropzone onFileAccepted={handleFileAccepted} />
+            <FileDropzone 
+              onFileAccepted={handleFileAccepted} 
+              acceptedFileTypes={{
+                "image/*": [],
+                "video/*": [],
+                "audio/*": [],
+                "application/pdf": [],
+                "application/msword": [],
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [],
+                "text/plain": [],
+                "application/zip": [],
+                // Add other accepted MIME types as needed
+              }}
+            />
 
             {file && (
               <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="flex justify-between p-3 bg-muted rounded">
@@ -183,7 +259,10 @@ export default function ConversionForm() {
                     </div>
                   </div>
                 </div>
-                <Button variant="ghost" size="icon" onClick={() => setFile(null)}>
+                <Button variant="ghost" size="icon" onClick={() => {
+                  setFile(null);
+                  setError(null);
+                }}>
                   <X />
                 </Button>
               </motion.div>
@@ -192,20 +271,44 @@ export default function ConversionForm() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <Label>Input Format</Label>
-                <Badge variant="outline">{inputFormat.toUpperCase()}</Badge>
+                {inputFormat ? (
+                  <Badge variant="outline">{inputFormat.toUpperCase()}</Badge>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Upload a file to see its format</p>
+                )}
               </div>
               <div>
                 <Label>Output Format</Label>
-                <Select value={outputFormat} onValueChange={setOutputFormat}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Choose format" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(formatsMap[inputFormat] || []).map(fmt => (
-                      <SelectItem key={fmt} value={fmt}>{fmt.toUpperCase()}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {file ? (
+                  <Select 
+                    value={outputFormat} 
+                    onValueChange={(value) => {
+                      setOutputFormat(value);
+                      // Clear output format error if it exists
+                      if (error === "Please select an output format.") {
+                        setError(null);
+                      }
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Choose format" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {inputFormat && formatsMap[inputFormat] ? (
+                        formatsMap[inputFormat].map(fmt => (
+                          <SelectItem key={fmt} value={fmt}>{fmt.toUpperCase()}</SelectItem>
+                        ))
+                      ) : (
+                        <SelectItem value="" disabled>No formats available</SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <div className="text-sm text-muted-foreground flex items-center gap-2">
+                    <Upload size={16} />
+                    Upload a file first
+                  </div>
+                )}
               </div>
             </div>
 
