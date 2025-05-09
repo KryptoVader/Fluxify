@@ -20,8 +20,6 @@ import {
   CircleHelp,
   FileType,
   Settings2,
-  AlertCircle,
-  Upload,
 } from "lucide-react";
 import DownloadCard from "./DownloadCard";
 import {
@@ -37,15 +35,13 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
-// Simplified formats map
 type FormatsMap = Record<string, string[]>;
 
-// FFmpeg‐supported extensions
+// extensions that support HQ flag
 const ffmpegFormats = [
-  'mp4', 'avi', 'mov', 'mkv', 'webm', 'flv', 'wmv', '3gp',
-  'mp3', 'wav', 'aac', 'ogg', 'flac', 'm4a'
+  "mp4","avi","mov","mkv","webm","flv","wmv","3gp",
+  "mp3","wav","aac","ogg","flac","m4a",
 ];
 
 export default function ConversionForm() {
@@ -57,82 +53,67 @@ export default function ConversionForm() {
   const [isLoading, setIsLoading] = useState(false);
   const [highQuality, setHighQuality] = useState(false);
   const [resultUrl, setResultUrl] = useState<string | null>(null);
-  const [convertedFileName, setConvertedFileName] = useState<string>("");
-  const [error, setError] = useState<string | null>(null);
+  const [convertedFileName, setConvertedFileName] = useState("");
 
-  const isFfmpegFile = file
-    ? ffmpegFormats.includes(inputFormat.toLowerCase())
-    : false;
+  const isFfmpegFile =
+    file && ffmpegFormats.includes(inputFormat.toLowerCase());
 
   useEffect(() => {
-    const loadFormats = async () => {
-      try {
-        const res = await fetch("/api/supported-formats");
-        if (!res.ok) throw new Error(`Failed to load formats (${res.status})`);
-        const data: FormatsMap = await res.json();
+    fetch("/api/supported-formats")
+      .then((res) => res.json())
+      .then((data: FormatsMap) => {
         setFormatsMap(data);
-        if (Object.keys(data).length > 0) {
-          const first = Object.keys(data)[0];
-          setInputFormat(first);
-          setOutputFormat(data[first]?.[0] || "");
-        }
-      } catch (err) {
-        console.error(err);
-        toast.error("Failed to load supported formats. Please refresh.");
-      } finally {
-        setIsInitializing(false);
-      }
-    };
-    loadFormats();
+        const first = Object.keys(data)[0] || "";
+        setInputFormat(first);
+        setOutputFormat(data[first]?.[0] || "");
+      })
+      .catch(() => toast.error("Failed to load formats."))
+      .finally(() => setTimeout(() => setIsInitializing(false), 300));
   }, []);
 
   const handleFileAccepted = (f: File) => {
     setFile(f);
     setHighQuality(false);
-    setError(null);
-    const ext = f.name.split('.').pop()?.toLowerCase() || '';
+    const ext = f.name.split(".").pop()?.toLowerCase() || "";
+    toast.success(`Uploaded ${f.name}`, {
+      description: `${(f.size / 1024 / 1024).toFixed(2)} MB`,
+      action: { label: "Remove", onClick: () => setFile(null) },
+    });
     if (formatsMap[ext]) {
       setInputFormat(ext);
       setOutputFormat(formatsMap[ext][0]);
-      toast.success(`Uploaded ${f.name}`, {
-        description: `${(f.size / 1024 / 1024).toFixed(2)} MB`,
-        action: { label: 'Remove', onClick: () => setFile(null) }
-      });
     } else {
-      toast.error("Unsupported file format.", { description: ext.toUpperCase() });
-      setError(`.${ext} is not supported.`);
-      setFile(null);
+      toast.error(`.${ext} not supported`);
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
-    if (!file) return toast.error("Please upload a file first.");
-    if (!outputFormat) return toast.error("Please select an output format.");
-
+    if (!file || !outputFormat) {
+      toast.error("Please upload a file and select an output format.");
+      return;
+    }
     setIsLoading(true);
     try {
       const formData = new FormData();
-      formData.append('file', file);
-      formData.append('format', outputFormat);
+      formData.append("file", file);
+      formData.append("outputFormat", outputFormat);
       if (isFfmpegFile && highQuality) {
-        formData.append('highQuality', 'true');
+        formData.append("highQuality", "true");
       }
-      const res = await fetch('/api/convert', { method: 'POST', body: formData });
-      if (!res.ok) throw new Error((await res.json()).error || 'Conversion failed');
+      const res = await fetch("/api/convert", {
+        method: "POST",
+        body: formData,
+      });
       const data = await res.json();
       const url = data.converted?.[0]?.url;
-      if (!url) throw new Error('No output file created');
+      if (!url) throw new Error("Conversion failed");
       setResultUrl(url);
-      const base = file.name.replace(/\.[^.]+$/, '');
+      const base = file.name.replace(/\.[^.]+$/, "");
       setConvertedFileName(`${base}.${outputFormat}`);
-      toast.success('Conversion successful!');
+      toast.success("Conversion successful!");
     } catch (err: any) {
-      console.error(err);
-      setError(err.message);
-      toast.error(err.message);
-    } finally {
+      toast.error(err.message || "Server error during conversion.");
       setIsLoading(false);
     }
   };
@@ -154,9 +135,9 @@ export default function ConversionForm() {
         fileExtension={outputFormat}
         onConvertAnother={() => {
           setFile(null);
-          setOutputFormat(Object.keys(formatsMap)[0] || '');
+          setOutputFormat(Object.keys(formatsMap)[0] || "");
           setResultUrl(null);
-          setConvertedFileName('');
+          setConvertedFileName("");
         }}
       />
     );
@@ -186,23 +167,10 @@ export default function ConversionForm() {
           </div>
         </CardHeader>
         <CardContent>
-          {error && (
-            <Alert variant="destructive" className="mb-6">
-              <AlertCircle className="h-4 w-4" />
-              <AlertTitle>Error</AlertTitle>
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
           <form onSubmit={handleSubmit} className="space-y-6">
             <FileDropzone onFileAccepted={handleFileAccepted} acceptedFileTypes={{
-              "image/*": [],
-              "video/*": [],
-              "audio/*": [],
-              "application/pdf": [],
-              "application/msword": [],
-              "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [],
-              "text/plain": [],
-              "application/zip": [],
+              "image/*": [], "video/*": [], "audio/*": [],
+              "application/pdf": [], "application/zip": [], "text/plain": []
             }} />
 
             {file && (
@@ -220,7 +188,11 @@ export default function ConversionForm() {
                     </div>
                   </div>
                 </div>
-                <Button variant="ghost" size="icon" onClick={() => { setFile(null); setError(null); }}>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setFile(null)}
+                >
                   <X />
                 </Button>
               </motion.div>
@@ -229,30 +201,25 @@ export default function ConversionForm() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <Label>Input Format</Label>
-                {inputFormat ? (
-                  <Badge variant="outline">{inputFormat.toUpperCase()}</Badge>
-                ) : (
-                  <p className="text-sm text-muted-foreground">Upload a file to see its format</p>
-                )}
+                <Badge variant="outline">{inputFormat.toUpperCase()}</Badge>
               </div>
               <div>
                 <Label>Output Format</Label>
-                {file ? (
-                  <Select value={outputFormat} onValueChange={(v) => { setOutputFormat(v); setError(null); }}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Choose format" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {formatsMap[inputFormat]?.map(fmt => (
-                        <SelectItem key={fmt} value={fmt}>{fmt.toUpperCase()}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <div className="text-sm text-muted-foreground flex items-center gap-2">
-                    <Upload size={16} /> Upload a file first
-                  </div>
-                )}
+                <Select
+                  value={outputFormat}
+                  onValueChange={setOutputFormat}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Choose format" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(formatsMap[inputFormat] || []).map((fmt) => (
+                      <SelectItem key={fmt} value={fmt}>
+                        {fmt.toUpperCase()}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
@@ -262,7 +229,7 @@ export default function ConversionForm() {
                   id="hq-toggle"
                   type="checkbox"
                   checked={highQuality}
-                  onChange={e => setHighQuality(e.target.checked)}
+                  onChange={(e) => setHighQuality(e.target.checked)}
                   className="h-4 w-4 text-primary border-gray-300 rounded"
                 />
                 <label htmlFor="hq-toggle" className="text-sm">
@@ -271,16 +238,23 @@ export default function ConversionForm() {
               </div>
             )}
 
-            <Button type="submit" className="w-full" disabled={!file || isLoading}>
+            <Button
+              type="submit"
+              className="w-full"
+              disabled={!file || isLoading}
+            >
               {isLoading ? (
-                <><ArrowRight className="animate-pulse mr-2" />Converting…</>
+                <>
+                  <ArrowRight className="animate-pulse mr-2" />
+                  Converting…
+                </>
               ) : (
-                'Convert Now'
+                "Convert Now"
               )}
             </Button>
           </form>
 
-<AnimatePresence>
+          <AnimatePresence>
             {isLoading && (
               <motion.div
                 key="loader"
@@ -290,13 +264,15 @@ export default function ConversionForm() {
                 transition={{ duration: 0.4 }}
                 className="flex flex-col items-center p-8 bg-gradient-to-br from-muted/80 to-muted rounded-xl shadow-lg space-y-6 mt-8"
               >
-                {/* Animation with revolving file types that come in and out */}
                 <div className="relative w-40 h-40">
-                  {/* Central rotating hexagon with file icon */}
                   <motion.div
                     className="absolute inset-0 flex items-center justify-center"
                     animate={{ rotate: 360 }}
-                    transition={{ repeat: Infinity, duration: 8, ease: 'linear' }}
+                    transition={{
+                      repeat: Infinity,
+                      duration: 8,
+                      ease: "linear",
+                    }}
                   >
                     <div className="w-20 h-20 bg-primary/10 rounded-xl flex items-center justify-center transform rotate-45">
                       <div className="transform -rotate-45">
@@ -304,123 +280,34 @@ export default function ConversionForm() {
                       </div>
                     </div>
                   </motion.div>
-
-                  {/* Animated rings */}
                   <motion.div
                     className="absolute inset-0 border-2 border-primary/20 rounded-full"
-                    animate={{ scale: [1, 1.1, 1], opacity: [0.7, 0.2, 0.7] }}
-                    transition={{ repeat: Infinity, duration: 3, ease: 'easeInOut' }}
+                    animate={{
+                      scale: [1, 1.1, 1],
+                      opacity: [0.7, 0.2, 0.7],
+                    }}
+                    transition={{
+                      repeat: Infinity,
+                      duration: 3,
+                      ease: "easeInOut",
+                    }}
                   />
-
-                  <motion.div
-                    className="absolute inset-0 border border-primary/30 rounded-full"
-                    animate={{ scale: [1.1, 1.2, 1.1], opacity: [0.5, 0.1, 0.5] }}
-                    transition={{ repeat: Infinity, duration: 3, ease: 'easeInOut', delay: 0.5 }}
-                  />
-
-                  {/* Popular File Types with revolving motion and inward/outward movement */}
-                  {['PDF', 'MP4', 'JPG', 'DOC', 'MP3', 'PNG'].map((fileType, i) => {
-                    // Calculate starting angle spread evenly around the circle
-                    const startAngle = (i * 60) % 360; // 60 degrees per file type (360/6 = 60)
-
-                    return (
-                      <motion.div
-                        key={`file-${i}`}
-                        className="absolute top-1/2 left-1/2"
-                        style={{
-                          translateX: '-50%',
-                          translateY: '-50%',
-                          rotate: `${startAngle}deg` // Start at different angles
-                        }}
-                        animate={{
-                          rotate: [`${startAngle}deg`, `${startAngle + 360}deg`], // Revolution around center starting from different angles
-                        }}
-                        transition={{
-                          rotate: {
-                            repeat: Infinity,
-                            duration: 20, // Slower revolution
-                            ease: 'linear'
-                          }
-                        }}
-                      >
-                        <motion.div
-                          style={{
-                            translateX: '-50%',
-                            translateY: '-50%'
-                          }}
-                          animate={{
-                            x: [80, 40, 80], // Wider movement range (further from center)
-                            scale: [0.9, 1.2, 0.9],
-                            opacity: [0.7, 1, 0.7]
-                          }}
-                          transition={{
-                            x: {
-                              repeat: Infinity,
-                              duration: 6,
-                              ease: "easeInOut",
-                              delay: i * 0.8 // Increased delay between animations
-                            },
-                            scale: {
-                              repeat: Infinity,
-                              duration: 6,
-                              ease: 'easeInOut',
-                              delay: i * 0.8
-                            },
-                            opacity: {
-                              repeat: Infinity,
-                              duration: 6,
-                              ease: 'easeInOut',
-                              delay: i * 0.8
-                            }
-                          }}
-                          className="absolute bg-primary/10 backdrop-blur-sm px-2 py-1 rounded-md border border-primary/20"
-                        >
-                          <span className="text-xs font-mono font-bold text-primary">{fileType}</span>
-                        </motion.div>
-                      </motion.div>
-                    );
-                  })}
-
-                  {/* Data stream particles */}
-                  <div className="absolute inset-0">
-                    {[...Array(8)].map((_, i) => (
-                      <motion.div
-                        key={`particle-${i}`}
-                        className="absolute w-1 h-1 bg-primary rounded-full"
-                        initial={{
-                          x: '50%',
-                          y: '50%',
-                          opacity: 0,
-                          scale: 0
-                        }}
-                        animate={{
-                          x: ['50%', `${45 + Math.random() * 10}%`],
-                          y: ['50%', `${45 + Math.random() * 10}%`],
-                          opacity: [0, 0.8, 0],
-                          scale: [0, 1, 0]
-                        }}
-                        transition={{
-                          duration: 1.5 + Math.random(),
-                          repeat: Infinity,
-                          delay: i * 0.4,
-                          ease: 'easeInOut'
-                        }}
-                      />
-                    ))}
-                  </div>
                 </div>
-
                 <div className="text-center">
                   <h4 className="text-lg font-medium">
                     <motion.span
                       animate={{ opacity: [1, 0.7, 1] }}
                       transition={{ duration: 1.5, repeat: Infinity }}
                     >
-                      {isFfmpegFile && highQuality ? "High Quality Conversion" : "Converting your file"}
+                      {isFfmpegFile && highQuality
+                        ? "High Quality Conversion"
+                        : "Converting your file"}
                     </motion.span>
                   </h4>
                   <p className="text-sm text-muted-foreground mt-1">
-                    Processing {file?.name.split('.').pop()?.toUpperCase()} to {outputFormat.toUpperCase()}
+                    Processing{" "}
+                    {file?.name.split(".").pop()?.toUpperCase()} to{" "}
+                    {outputFormat.toUpperCase()}
                   </p>
                 </div>
               </motion.div>
