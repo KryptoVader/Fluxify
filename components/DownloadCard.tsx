@@ -2,12 +2,12 @@
 
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { 
-  CheckCircle, 
-  Download, 
-  ArrowRight, 
-  Share2, 
-  Copy, 
+import {
+  CheckCircle,
+  Download,
+  ArrowRight,
+  Share2,
+  Copy,
   ChevronDown,
   ChevronUp,
   FileText,
@@ -22,87 +22,47 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 
 interface DownloadCardProps {
-  url: string;
-  fileName: string;
-  onReset: () => void;
+  filename: string;
+  downloadUrl: string;
+  fileExtension: string;
   fileSize?: string;
-  fileType?: string;
-  previewAvailable?: boolean;
+  onConvertAnother: () => void;
 }
 
-export function DownloadCard({ 
-  url, 
-  fileName, 
-  onReset, 
-  fileSize, 
-  fileType,
-  previewAvailable = false
+export default function DownloadCard({
+  filename,
+  downloadUrl,
+  fileExtension,
+  fileSize,
+  onConvertAnother,
 }: DownloadCardProps) {
-  const [showDetails, setShowDetails] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const [downloadStarted, setDownloadStarted] = useState(false);
+  const [metaOpen, setMetaOpen] = useState(false);
 
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(window.location.origin + url);
-      toast.success("Link copied to clipboard!", {
-        description: "Share it with anyone who needs this file",
-      });
+      await navigator.clipboard.writeText(downloadUrl);
+      setCopied(true);
+      toast.success("Link copied to clipboard");
     } catch {
-      toast.error("Failed to copy link");
+      toast.error("Copy failed");
     }
   };
-
-  const handleShare = async () => {
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: `Converted File: ${fileName}`,
-          text: `Check out this converted file: ${fileName}`,
-          url: window.location.origin + url,
-        });
-        toast.success("Shared successfully!");
-      } catch (error: any) {
-        if (error.name !== "AbortError") {
-          toast.error("Failed to share");
-        }
-      }
-    } else {
-      handleCopy();
-    }
-  };
-
-  const handleDownload = () => {
-    setDownloadStarted(true);
-    toast.success("Download started!", {
-      description: `Downloading ${fileName}`,
-    });
-    
-    // Reset the download state after animation completes
-    setTimeout(() => setDownloadStarted(false), 3000);
-  };
-
-  // Extract file extension from fileName
-  const fileExtension = fileName.split('.').pop()?.toUpperCase() || fileType;
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
-      transition={{ duration: 0.4, ease: "easeOut" }}
-      className="bg-gradient-to-br from-primary-50 to-primary-100 dark:from-primary-900/20 dark:to-primary-900/10 border border-primary-200 dark:border-primary-800 shadow-lg rounded-xl p-6 flex flex-col items-center space-y-5 max-w-md w-full mx-auto"
+      className="max-w-md mx-auto p-6 bg-white dark:bg-gray-800 rounded-2xl shadow-lg space-y-4"
     >
-      <motion.div 
-        className="bg-primary-100 dark:bg-primary-900/30 p-4 rounded-full"
+      <motion.div
+        className="flex justify-center"
         animate={downloadStarted ? { scale: [1, 1.1, 1] } : {}}
         transition={{ duration: 0.5, ease: "easeInOut" }}
       >
@@ -110,187 +70,161 @@ export function DownloadCard({
       </motion.div>
 
       <div className="text-center space-y-2 w-full">
-        <h3 className="text-2xl font-bold text-primary-800 dark:text-primary-100">Conversion Complete!</h3>
+        <h3 className="text-2xl font-bold text-primary-800 dark:text-primary-100">
+          Conversion Complete!
+        </h3>
+
         <div className="flex items-center justify-center gap-2">
-          <Badge variant="outline" className="bg-primary-50 dark:bg-primary-900/50 text-primary-700 dark:text-primary-300 border-primary-200 dark:border-primary-700">
+          <Badge
+            variant="outline"
+            className="bg-primary-50 dark:bg-gray-700 dark:text-primary-300 border-primary-200 dark:border-primary-700"
+          >
             {fileExtension}
           </Badge>
           {fileSize && (
-            <Badge variant="outline" className="bg-primary-50 dark:bg-primary-900/50 text-primary-700 dark:text-primary-300 border-primary-200 dark:border-primary-700">
+            <Badge
+              variant="outline"
+              className="bg-primary-50 dark:bg-gray-700 dark:text-primary-300 border-primary-200 dark:border-primary-700"
+            >
               {fileSize}
             </Badge>
           )}
         </div>
-        <p className="text-sm text-primary-700 dark:text-primary-300 max-w-xs mx-auto truncate">
-          {fileName}
+
+        <p className="text-sm text-gray-600 dark:text-gray-400 truncate">
+          {filename}
         </p>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-3 w-full">
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <motion.a
-                href={url}
-                download={fileName}
-                onClick={handleDownload}
-                whileHover={{ scale: 1.03 }}
-                whileTap={{ scale: 0.97 }}
-                className="w-full"
-              >
-                <Button
-                  variant="outline"
-                  className="w-full border-primary-300 dark:border-primary-700 text-primary-700 dark:text-primary-300 hover:bg-primary-50 dark:hover:bg-primary-900/40"
-                >
-                  <Download className="mr-2 h-4 w-4" />
-                  Download
-                </Button>
-              </motion.a>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Save file to your device</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-
-        <div className="flex gap-2 w-full">
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <motion.div
-                  whileHover={{ scale: 1.03 }}
-                  whileTap={{ scale: 0.97 }}
-                  className="flex-1"
-                >
-                  <Button
-                    variant="outline"
-                    onClick={handleCopy}
-                    className="w-full border-primary-300 dark:border-primary-700 text-primary-700 dark:text-primary-300 hover:bg-primary-50 dark:hover:bg-primary-900/40"
-                  >
-                    <Copy className="h-4 w-4" />
-                  </Button>
-                </motion.div>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Copy download link</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <motion.div
-                  whileHover={{ scale: 1.03 }}
-                  whileTap={{ scale: 0.97 }}
-                  className="flex-1"
-                >
-                  <Button
-                    variant="outline"
-                    onClick={handleShare}
-                    className="w-full border-primary-300 dark:border-primary-700 text-primary-700 dark:text-primary-300 hover:bg-primary-50 dark:hover:bg-primary-900/40"
-                  >
-                    <Share2 className="h-4 w-4" />
-                  </Button>
-                </motion.div>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Share this file</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-
-          {previewAvailable && (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <motion.a
-                    href={url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    whileHover={{ scale: 1.03 }}
-                    whileTap={{ scale: 0.97 }}
-                    className="flex-1"
-                  >
-                    <Button
-                      variant="outline"
-                      className="w-full border-primary-300 dark:border-primary-700 text-primary-700 dark:text-primary-300 hover:bg-primary-50 dark:hover:bg-primary-900/40"
-                    >
-                      <Eye className="h-4 w-4" />
-                    </Button>
-                  </motion.a>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Preview file</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          )}
-        </div>
-      </div>
-
-      <div className="w-full">
+      <div className="space-y-4">
+        {/* DOWNLOAD BUTTON */}
         <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setShowDetails(!showDetails)}
-          className="w-full text-primary-600 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/30 flex items-center justify-center"
+          className="w-full"
+          size="lg"
+          asChild
+          onClick={() => {
+            setDownloadStarted(true);
+            setTimeout(() => {
+              setDownloadStarted(false);
+            }, 500);
+          }}
         >
-          <span>File Details</span>
-          {showDetails ? 
-            <ChevronUp className="ml-2 h-4 w-4" /> : 
-            <ChevronDown className="ml-2 h-4 w-4" />
-          }
+          <a
+            href={downloadUrl}
+            download={filename}
+            className="flex items-center justify-center w-full"
+          >
+            <Download className="mr-2 h-5 w-5" />
+            Download
+          </a>
         </Button>
 
+        {/* COPY & SHARE */}
+        <div className="flex justify-between">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCopy}
+                  className="flex-1 mr-2"
+                >
+                  <Copy className="mr-1 h-4 w-4" />
+                  {copied ? "Copied" : "Copy Link"}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Copy download link</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
+          <div className="relative">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShareOpen((o) => !o)}
+              className="flex items-center"
+            >
+              <Share2 className="mr-1 h-4 w-4" />
+              Share
+              {shareOpen ? (
+                <ChevronUp className="ml-1 h-4 w-4" />
+              ) : (
+                <ChevronDown className="ml-1 h-4 w-4" />
+              )}
+            </Button>
+            <AnimatePresence>
+              {shareOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-700 border rounded-lg shadow-lg p-2 space-y-2 z-10"
+                >
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full justify-start"
+                    onClick={handleCopy}
+                  >
+                    <Copy className="mr-2 h-4 w-4" /> Copy Link
+                  </Button>
+                  <Button variant="ghost" size="sm" className="w-full justify-start" asChild>
+                      <a
+                        href={`mailto:?subject=Here’s your converted file&body=Download it here: ${downloadUrl}`}
+                        className="flex items-center w-full"
+                      >
+                        <ArrowRight className="mr-2 h-4 w-4" />
+                        Email
+                      </a>
+                    </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full justify-start"
+                    onClick={() => window.open(downloadUrl, "_blank")}
+                  >
+                    <Eye className="mr-2 h-4 w-4" /> Preview
+                  </Button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        </div>
+
+        {/* METADATA TOGGLE */}
+        <Button
+          variant="link"
+          size="sm"
+          onClick={() => setMetaOpen((o) => !o)}
+        >
+          <FileText className="mr-1 h-4 w-4" />
+          {metaOpen ? "Hide Details" : "Show Details"}
+        </Button>
         <AnimatePresence>
-          {showDetails && (
-            <motion.div
+          {metaOpen && (
+            <motion.pre
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: "auto", opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.3 }}
-              className="overflow-hidden"
+              className="overflow-auto text-xs bg-gray-100 dark:bg-gray-800 p-2 rounded"
             >
-              <div className="pt-3 pb-1 px-3 mt-2 border border-primary-200 dark:border-primary-800 rounded-lg bg-primary-50/50 dark:bg-primary-900/20">
-                <div className="flex items-center gap-2 mb-2">
-                  <FileText className="h-4 w-4 text-primary-500 dark:text-primary-400" />
-                  <span className="text-sm font-medium text-primary-700 dark:text-primary-300">
-                    File Information
-                  </span>
-                </div>
-                <div className="text-sm text-primary-600 dark:text-primary-400 space-y-1 pl-6">
-                  <p><span className="font-medium">Name:</span> {fileName}</p>
-                  <p><span className="font-medium">Type:</span> {fileType || fileExtension}</p>
-                  {fileSize && <p><span className="font-medium">Size:</span> {fileSize}</p>}
-                  <p><span className="font-medium">Created:</span> {new Date().toLocaleDateString()}</p>
-                </div>
-              </div>
-            </motion.div>
+              <code>{JSON.stringify({ filename, fileExtension, fileSize }, null, 2)}</code>
+            </motion.pre>
           )}
         </AnimatePresence>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-2 w-full">
+      {/* CONVERT ANOTHER FILE */}
+      <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
         <Button
-          variant="ghost"
+          variant="outline"
           size="sm"
-          onClick={onReset}
-          className="text-primary-600 dark:text-primary-400 hover:text-primary-800 dark:hover:text-primary-200 hover:bg-primary-100 dark:hover:bg-primary-900/30"
+          className="w-full"
+          onClick={onConvertAnother}
         >
-          <ArrowRight className="mr-2 h-4 w-4" />
           Convert Another File
         </Button>
-
-        <Link href="/" className="w-full sm:w-auto">
-          <Button
-            variant="link"
-            size="sm"
-            className="w-full text-primary-600 dark:text-primary-400"
-          >
-            Return to Home
-          </Button>
-        </Link>
       </div>
     </motion.div>
   );

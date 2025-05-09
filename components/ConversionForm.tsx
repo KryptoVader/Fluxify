@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -23,11 +23,10 @@ import {
   AlertCircle,
   Upload,
 } from "lucide-react";
-import { DownloadCard } from "./DownloadCard";
+import DownloadCard from "./DownloadCard";
 import {
   Card,
   CardContent,
-  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -61,119 +60,78 @@ export default function ConversionForm() {
   const [convertedFileName, setConvertedFileName] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
 
-  // Determine if current file uses FFmpeg plugin
   const isFfmpegFile = file
     ? ffmpegFormats.includes(inputFormat.toLowerCase())
     : false;
 
-  // Load supported formats on mount
   useEffect(() => {
     const loadFormats = async () => {
       try {
         const res = await fetch("/api/supported-formats");
-        if (!res.ok) {
-          throw new Error(`Failed to load formats (${res.status})`);
-        }
+        if (!res.ok) throw new Error(`Failed to load formats (${res.status})`);
         const data: FormatsMap = await res.json();
         setFormatsMap(data);
-        
-        // Only set default formats if there's data
         if (Object.keys(data).length > 0) {
-          const first = Object.keys(data)[0] || "";
+          const first = Object.keys(data)[0];
           setInputFormat(first);
           setOutputFormat(data[first]?.[0] || "");
         }
-        
-        setTimeout(() => setIsInitializing(false), 300);
       } catch (err) {
-        console.error("Error loading formats:", err);
+        console.error(err);
+        toast.error("Failed to load supported formats. Please refresh.");
+      } finally {
         setIsInitializing(false);
-        toast.error("Failed to load supported formats. Please refresh the page.");
       }
     };
-    
     loadFormats();
   }, []);
 
   const handleFileAccepted = (f: File) => {
-    console.log("File accepted:", f.name); // Debug log
     setFile(f);
-    setHighQuality(false); // reset HQ when new file loaded
-    setError(null); // Clear any previous errors
-    
+    setHighQuality(false);
+    setError(null);
     const ext = f.name.split('.').pop()?.toLowerCase() || '';
-    toast.success(`Uploaded ${f.name}`, {
-      description: `${(f.size / 1024 / 1024).toFixed(2)} MB`,
-      action: { label: 'Remove', onClick: () => setFile(null) }
-    });
-    
-    // Only set formats if this extension is recognized
     if (formatsMap[ext]) {
       setInputFormat(ext);
       setOutputFormat(formatsMap[ext][0]);
-    } else {
-      // Handle unrecognized file format
-      toast.error("Unsupported file format", {
-        description: `The format ${ext.toUpperCase()} is not supported for conversion.`
+      toast.success(`Uploaded ${f.name}`, {
+        description: `${(f.size / 1024 / 1024).toFixed(2)} MB`,
+        action: { label: 'Remove', onClick: () => setFile(null) }
       });
-      setError(`File format .${ext} is not supported. Please try a different file.`);
+    } else {
+      toast.error("Unsupported file format.", { description: ext.toUpperCase() });
+      setError(`.${ext} is not supported.`);
+      setFile(null);
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null); // Clear any previous errors
-    
-    if (!file) {
-      setError("Please upload a file first.");
-      toast.error("Please upload a file first.");
-      return;
-    }
-    
-    if (!outputFormat) {
-      setError("Please select an output format.");
-      toast.error("Please select an output format.");
-      return;
-    }
-    
+    setError(null);
+    if (!file) return toast.error("Please upload a file first.");
+    if (!outputFormat) return toast.error("Please select an output format.");
+
     setIsLoading(true);
     try {
       const formData = new FormData();
       formData.append('file', file);
-      formData.append('outputFormat', outputFormat);
-
-      // only append HQ flag for FFmpeg files
+      formData.append('format', outputFormat);
       if (isFfmpegFile && highQuality) {
         formData.append('highQuality', 'true');
       }
-
-      const response = await fetch('/api/convert', { method: 'POST', body: formData });
-      
-      if (!response.ok) {
-        // Handle different types of HTTP errors
-        if (response.status === 500) {
-          throw new Error("Server error occurred. Please try again later.");
-        } else if (response.status === 413) {
-          throw new Error("File too large for conversion.");
-        } else if (response.status === 415) {
-          throw new Error("Unsupported file format.");
-        } else {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.message || `Error (${response.status}): File conversion failed.`);
-        }
-      }
-      
-      const data = await response.json();
+      const res = await fetch('/api/convert', { method: 'POST', body: formData });
+      if (!res.ok) throw new Error((await res.json()).error || 'Conversion failed');
+      const data = await res.json();
       const url = data.converted?.[0]?.url;
-      if (!url) throw new Error('Conversion failed. No output file was created.');
+      if (!url) throw new Error('No output file created');
       setResultUrl(url);
       const base = file.name.replace(/\.[^.]+$/, '');
       setConvertedFileName(`${base}.${outputFormat}`);
       toast.success('Conversion successful!');
     } catch (err: any) {
-      const errorMessage = err.message || 'File conversion failed. Please try again.';
-      setError(errorMessage);
-      toast.error(errorMessage);
+      console.error(err);
+      setError(err.message);
+      toast.error(err.message);
     } finally {
       setIsLoading(false);
     }
@@ -191,9 +149,15 @@ export default function ConversionForm() {
   if (resultUrl) {
     return (
       <DownloadCard
-        url={resultUrl}
-        fileName={convertedFileName}
-        onReset={() => window.location.reload()}
+        filename={convertedFileName}
+        downloadUrl={resultUrl}
+        fileExtension={outputFormat}
+        onConvertAnother={() => {
+          setFile(null);
+          setOutputFormat(Object.keys(formatsMap)[0] || '');
+          setResultUrl(null);
+          setConvertedFileName('');
+        }}
       />
     );
   }
@@ -201,14 +165,12 @@ export default function ConversionForm() {
   return (
     <div className="max-w-2xl mx-auto py-6">
       <Card>
-        {/* Aligned header: icon and title vertically centered, tooltip on right */}
         <CardHeader>
           <div className="flex items-center justify-between w-full">
             <div className="flex items-center space-x-3">
               <FileType className="w-6 h-6 text-primary" />
               <CardTitle className="text-xl">File Converter</CardTitle>
             </div>
-
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -217,7 +179,7 @@ export default function ConversionForm() {
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent side="left">
-                  <p>Upload your file, choose formats, and convert.</p>
+                  Upload your file, choose formats, and convert.
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
@@ -231,25 +193,24 @@ export default function ConversionForm() {
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
-          
           <form onSubmit={handleSubmit} className="space-y-6">
-            <FileDropzone 
-              onFileAccepted={handleFileAccepted} 
-              acceptedFileTypes={{
-                "image/*": [],
-                "video/*": [],
-                "audio/*": [],
-                "application/pdf": [],
-                "application/msword": [],
-                "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [],
-                "text/plain": [],
-                "application/zip": [],
-                // Add other accepted MIME types as needed
-              }}
-            />
+            <FileDropzone onFileAccepted={handleFileAccepted} acceptedFileTypes={{
+              "image/*": [],
+              "video/*": [],
+              "audio/*": [],
+              "application/pdf": [],
+              "application/msword": [],
+              "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [],
+              "text/plain": [],
+              "application/zip": [],
+            }} />
 
             {file && (
-              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="flex justify-between p-3 bg-muted rounded">
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex justify-between p-3 bg-muted rounded"
+              >
                 <div className="flex items-center space-x-3">
                   <FileIcon />
                   <div>
@@ -259,10 +220,7 @@ export default function ConversionForm() {
                     </div>
                   </div>
                 </div>
-                <Button variant="ghost" size="icon" onClick={() => {
-                  setFile(null);
-                  setError(null);
-                }}>
+                <Button variant="ghost" size="icon" onClick={() => { setFile(null); setError(null); }}>
                   <X />
                 </Button>
               </motion.div>
@@ -280,39 +238,24 @@ export default function ConversionForm() {
               <div>
                 <Label>Output Format</Label>
                 {file ? (
-                  <Select 
-                    value={outputFormat} 
-                    onValueChange={(value) => {
-                      setOutputFormat(value);
-                      // Clear output format error if it exists
-                      if (error === "Please select an output format.") {
-                        setError(null);
-                      }
-                    }}
-                  >
+                  <Select value={outputFormat} onValueChange={(v) => { setOutputFormat(v); setError(null); }}>
                     <SelectTrigger>
                       <SelectValue placeholder="Choose format" />
                     </SelectTrigger>
                     <SelectContent>
-                      {inputFormat && formatsMap[inputFormat] ? (
-                        formatsMap[inputFormat].map(fmt => (
-                          <SelectItem key={fmt} value={fmt}>{fmt.toUpperCase()}</SelectItem>
-                        ))
-                      ) : (
-                        <SelectItem value="" disabled>No formats available</SelectItem>
-                      )}
+                      {formatsMap[inputFormat]?.map(fmt => (
+                        <SelectItem key={fmt} value={fmt}>{fmt.toUpperCase()}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 ) : (
                   <div className="text-sm text-muted-foreground flex items-center gap-2">
-                    <Upload size={16} />
-                    Upload a file first
+                    <Upload size={16} /> Upload a file first
                   </div>
                 )}
               </div>
             </div>
 
-            {/* High Quality toggle only for FFmpeg files */}
             {isFfmpegFile && (
               <div className="flex items-center space-x-2">
                 <input
@@ -330,17 +273,14 @@ export default function ConversionForm() {
 
             <Button type="submit" className="w-full" disabled={!file || isLoading}>
               {isLoading ? (
-                <>
-                  <ArrowRight className="animate-pulse mr-2" />
-                  Converting…
-                </>
+                <><ArrowRight className="animate-pulse mr-2" />Converting…</>
               ) : (
                 'Convert Now'
               )}
             </Button>
           </form>
 
-          <AnimatePresence>
+<AnimatePresence>
             {isLoading && (
               <motion.div
                 key="loader"
